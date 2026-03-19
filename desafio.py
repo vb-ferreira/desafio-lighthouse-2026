@@ -14,10 +14,14 @@ def _():
 
 @app.cell
 def _(pd):
-    def load_data(filepath):
-        return pd.read_csv(filepath)
+    def carregar_dados(arquivo, tipo):
+        if tipo == 'csv':
+            df = pd.read_csv(arquivo)
+        elif tipo == 'json':
+            df = pd.read_json(arquivo)
+        return df
 
-    return (load_data,)
+    return (carregar_dados,)
 
 
 @app.cell(hide_code=True)
@@ -29,8 +33,8 @@ def _(mo):
 
 
 @app.cell
-def _(load_data):
-    vendas = load_data('data/vendas_2023_2024.csv')
+def _(carregar_dados):
+    vendas = carregar_dados('data/vendas_2023_2024.csv', 'csv')
     vendas.head()
     return (vendas,)
 
@@ -301,8 +305,8 @@ def _(mo):
 
 
 @app.cell
-def _(load_data):
-    produtos = load_data('data/produtos_raw.csv')
+def _(carregar_dados):
+    produtos = carregar_dados('data/produtos_raw.csv', 'csv')
     produtos.head()
     return (produtos,)
 
@@ -387,14 +391,39 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## **Q3.1: De JSON para CSV**
-    Converta o arquivo `custos_importacao.json` para csv.
+    ## **Q3.1: De JSON para o pandas**
+    Converta o arquivo `custos_importacao.json` para um DataFrame.
     """)
     return
 
 
 @app.cell
-def _():
+def _(carregar_dados):
+    # Lê arquivo json como um DataFrame pandas
+    custos_desnormalizado = carregar_dados('data/custos_importacao.json', 'json')
+    custos_desnormalizado
+    return (custos_desnormalizado,)
+
+
+@app.cell
+def _(custos_desnormalizado, pd):
+    # Normaliza coluna `historic_data` 
+    def normalizar_json(df):
+        df_explodido = df.explode('historic_data').reset_index(drop=True)
+        df_normalizado = pd.json_normalize(df_explodido['historic_data'])
+        df_final = pd.concat([df_explodido.drop(columns=['historic_data']), df_normalizado], axis=1)
+
+        return df_final
+
+    custos = normalizar_json(custos_desnormalizado)
+    return (custos,)
+
+
+@app.cell
+def _(custos, pd):
+    # Converte coluna `start_date` para `datetime`
+    custos['start_date'] = pd.to_datetime(custos['start_date'], format='%d/%m/%Y')
+    custos.head()
     return
 
 
@@ -407,8 +436,66 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    Após a normalização da coluna `historic_data`, a tabela `custos` contém **1260** registros..
+    """)
+    return
+
+
+app._unparsable_cell(
+    r"""
+    -- Número de linhas do df "custos"
+    custos.shape[0]
+    """,
+    name="_"
+)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q4: Dados Públicos**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q4.1: Cálculo e modelagem (SQL)**
+    - Calcule o custo total em BRL por transação (custo USD * câmbio do dia)
+    - Identifique transações com prejuízo
+    - Agregue os dados por `id_produto`, gerando:
+        - Receita total (BRL)
+        - Prejuízo total (BRL)
+        - Percentual de perda (prejuízo_total / receita_total)
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q4.2: Análise visual e validação**
+    Gere um gráfico que represente o prejuízo total por produto, considerando apenas produtos que tiveram prejuízo.
+
+    Qual é o `id_produto` que apresentou a maior porcentagem de perda financeira relativa (maior % de prejuízo sobre sua receita) no período analisado?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q4.3: Explique sobre o desenvolvimento**
+    - Qual data de câmbio você utilizou?
+    - Como definiu o prejuízo?
+    - Alguma suposição relevante?
+    """)
     return
 
 
