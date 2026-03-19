@@ -14,8 +14,8 @@ def _():
 
 @app.cell
 def _(pd):
-    def load_data():
-        return pd.read_csv('data/vendas_2023_2024.csv')
+    def load_data(filepath):
+        return pd.read_csv(filepath)
 
     return (load_data,)
 
@@ -30,9 +30,9 @@ def _(mo):
 
 @app.cell
 def _(load_data):
-    df = load_data()
-    df.head()
-    return (df,)
+    vendas = load_data('data/vendas_2023_2024.csv')
+    vendas.head()
+    return (vendas,)
 
 
 @app.cell(hide_code=True)
@@ -64,40 +64,40 @@ def _(mo):
 
 
 @app.cell
-def profiling(mo):
+def profiling(mo, vendas):
     _df = mo.sql(
         f"""
         -- Profiling com função exclusiva do DuckDB
-        SUMMARIZE 'df';
+        SUMMARIZE vendas;
         """
     )
     return
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Quantidade de linhas
-        SELECT COUNT(*) FROM df;
+        SELECT COUNT(*) FROM vendas;
         """
     )
     return
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Quantidade e tipo de dados de cada coluna
-        DESCRIBE df;
+        DESCRIBE vendas;
         """
     )
     return
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Mínimos, Máximos e Média (total)
@@ -107,7 +107,7 @@ def _(df, mo):
           MIN(total) AS total_minimo, 
           MAX(total) AS total_macimo, 
           ROUND(AVG(total), 2) AS total_media
-        FROM df;
+        FROM vendas;
         """
     )
     return
@@ -123,11 +123,11 @@ def _(mo):
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Valor máximo da coluna total
-        SELECT MAX(total) FROM df;
+        SELECT MAX(total) FROM vendas;
         """
     )
     return
@@ -171,7 +171,7 @@ def _(mo):
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Outliers (Valor Unitário de Produto)
@@ -179,7 +179,7 @@ def _(df, mo):
             SELECT 
                 percentile_cont(0.25) WITHIN GROUP (ORDER BY total) as q1,
                 percentile_cont(0.75) WITHIN GROUP (ORDER BY total) as q3
-            FROM df
+            FROM vendas
         ),
         limites AS (
             SELECT 
@@ -191,7 +191,7 @@ def _(df, mo):
             FROM quartis
         )
         SELECT t.*
-        FROM df t, limites lm
+        FROM vendas t, limites lm
         WHERE (t.total < lm.limite_inferior OR t.total > lm.limite_superior) AND QTD = 1
         ORDER BY total DESC;
         """
@@ -200,11 +200,11 @@ def _(df, mo):
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     apurado_dia = mo.sql(
         f"""
         -- Agregado de vandas por data
-        SELECT SUM(total) AS apurado, sale_date FROM df
+        SELECT SUM(total) AS apurado, sale_date FROM vendas
         GROUP BY sale_date;
         """
     )
@@ -241,24 +241,24 @@ def outliers_data(apurado_dia, mo):
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Número de linhas duplicadas
         SELECT 
-            (SELECT COUNT(*) FROM df) - 
-            (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM df)) AS total_de_linhas_duplicadas;
+            (SELECT COUNT(*) FROM vendas) - 
+            (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM vendas)) AS total_de_linhas_duplicadas;
         """
     )
     return
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Busca por valores nulos
-        SELECT * FROM df WHERE (COLUMNS(*)) IS NULL;
+        SELECT * FROM vendas WHERE (COLUMNS(*)) IS NULL;
         """
     )
     return
@@ -300,6 +300,56 @@ def _(mo):
     return
 
 
+@app.cell
+def _(load_data):
+    produtos = load_data('data/produtos_raw.csv')
+    produtos.head()
+    return (produtos,)
+
+
+@app.cell
+def _(produtos):
+    # Padroniza categorias
+    def padronizar_categoria(texto):
+        # Converte para minúsculo e elimina os espaços em branco
+        texto_limpo = texto.lower().replace(' ', '')
+
+        # Classificação simplificada
+        if 'elet' in texto_limpo:
+            return 'eletrônicos'
+        elif 'prop' in texto_limpo:
+            return 'propulsão'
+        elif 'anc' or 'enc' in texto_limpo:
+            return 'ancoragem'
+        else:
+            return 'outros'
+
+    produtos['actual_category'] = produtos['actual_category'].apply(padronizar_categoria)
+    return
+
+
+@app.cell
+def _(produtos):
+    # Converte para número
+    def converter_para_numero(valor):
+        # Remove o cifrão e espaços em branco
+        valor_limpo = valor.replace('R$', '').strip()
+    
+        # Converte para float
+        return float(valor_limpo)
+
+    produtos['price'] = produtos['price'].apply(converter_para_numero)
+    return
+
+
+@app.cell
+def _(produtos):
+    # Remove produtos duplicados
+    produtos_limpo = produtos.drop_duplicates(keep='first').reset_index(drop=True)
+    produtos_limpo
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -312,8 +362,53 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
- 
+    /// admonition | Resposta:
+
+    Foram removidos **7** produtos duplicados, restando **150** produtos na base.
     """)
+    return
+
+
+@app.cell
+def _(produtos):
+    # Quantidade de produtos duplicados removidos
+    int(produtos.duplicated().sum())
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q3: Custos de Importação**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q3.1: De JSON para CSV**
+    Converta o arquivo `custos_importacao.json` para csv.
+    """)
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q3.2: Validação**
+    Quantas entradas de importação o CSV recebeu ao todo após a normalização?
+    """)
+    return
+
+
+@app.cell
+def _():
     return
 
 
