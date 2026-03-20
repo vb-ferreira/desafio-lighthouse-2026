@@ -8,8 +8,9 @@ app = marimo.App(width="medium")
 def _():
     import marimo as mo
     import pandas as pd
+    import altair as alt
 
-    return mo, pd
+    return alt, mo, pd
 
 
 @app.cell
@@ -75,6 +76,13 @@ def profiling(mo, vendas):
         SUMMARIZE vendas;
         """
     )
+    return
+
+
+@app.cell
+def _(pd, vendas):
+    # Converte coluna `sale_date` para `datetime`
+    vendas['sale_date'] = pd.to_datetime(vendas['sale_date'], format='mixed')
     return
 
 
@@ -269,12 +277,12 @@ def _(mo, vendas):
 
 
 @app.cell
-def _(df, mo):
+def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Datas mal formatadas
         SELECT sale_date, COUNT(*)
-        FROM df
+        FROM vendas
         WHERE TRY_CAST(sale_date AS DATE) IS NULL 
           AND sale_date IS NOT NULL
         GROUP BY ALL;
@@ -336,14 +344,16 @@ def _(produtos):
 def _(produtos):
     # Converte para número
     def converter_para_numero(valor):
-        # Remove o cifrão e espaços em branco
-        valor_limpo = valor.replace('R$', '').strip()
-    
+        if 'R$' in valor:
+            valor_limpo = valor.replace('R$', '').strip()
+        else:
+            valor_limpo = valor.replace(',', '.').strip()
+
         # Converte para float
         return float(valor_limpo)
 
     produtos['price'] = produtos['price'].apply(converter_para_numero)
-    return
+    return (converter_para_numero,)
 
 
 @app.cell
@@ -441,18 +451,16 @@ def _(mo):
     mo.md(r"""
     /// admonition | Resposta:
 
-    Após a normalização da coluna `historic_data`, a tabela `custos` contém **1260** registros..
+    Após a normalização da coluna `historic_data`, a tabela `custos` contém **1260** registros.
     """)
     return
 
 
-app._unparsable_cell(
-    r"""
-    -- Número de linhas do df "custos"
+@app.cell
+def _(custos):
+    # Número de linhas do df "custos"
     custos.shape[0]
-    """,
-    name="_"
-)
+    return
 
 
 @app.cell(hide_code=True)
@@ -477,6 +485,119 @@ def _(mo):
     return
 
 
+@app.cell
+def _(custos, mo):
+    _df = mo.sql(
+        f"""
+        SELECT * FROM custos;
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo, vendas):
+    _df = mo.sql(
+        f"""
+        SELECT * FROM vendas LIMIT 1;
+        """
+    )
+    return
+
+
+@app.cell
+def _(custos, mo, vendas):
+    custo_vendas = mo.sql(
+        f"""
+        -- Junção das tabelas de custos e vendas (considerando históricos)
+        WITH custos_com_fim AS (
+            SELECT 
+                *,
+                -- Cria intervalo de "preço vigente"
+                LEAD(start_date) OVER (PARTITION BY product_id ORDER BY start_date) AS end_date
+            FROM custos
+        )
+        -- Juntar onde a venda cai dentro desse intervalo
+        SELECT v.id_client, v.id_product, v.qtd, v.total, v.sale_date, (c.usd_price * v.qtd) AS usd_price
+        FROM vendas v
+        LEFT JOIN custos_com_fim c 
+            ON v.id_product = c.product_id
+           AND v.sale_date >= c.start_date 
+           AND (v.sale_date < c.end_date OR c.end_date IS NULL);
+        """
+    )
+    return (custo_vendas,)
+
+
+@app.cell
+def _(carregar_dados):
+    # Carrega cotação do dolar no período
+    dolar = carregar_dados('data/dolar_2023_2024.csv', 'csv')
+    return (dolar,)
+
+
+@app.cell
+def _(converter_para_numero, dolar, pd):
+    # Converte coluna `dataHoraCotacao` para `datetime` e `cotacaoCompra` para float
+    dolar['dataHoraCotacao'] = pd.to_datetime(dolar['dataHoraCotacao'], format='mixed')
+    dolar['cotacaoCompra'] = dolar['cotacaoCompra'].apply(converter_para_numero)
+    dolar.head()
+    return
+
+
+@app.cell
+def _(custo_vendas, dolar, mo):
+    receita_menos_custo = mo.sql(
+        f"""
+        -- Calcula lucro/prejuízo das transações
+        SELECT 
+            v.id_client, 
+            v.id_product, 
+            v.qtd, 
+            v.total AS receita_transacao, 
+            v.sale_date,
+            d.cotacaoCompra AS dolar_dia,
+            (v.usd_price * v.qtd) AS custo_transacao_usd,
+            (v.usd_price * dolar_dia) AS custo_transacao_brl,
+            (receita_transacao - custo_transacao_brl) AS diff_receita_custo
+        FROM custo_vendas v
+        LEFT JOIN dolar d 
+            ON v.sale_date = d.dataHoraCotacao;
+        """
+    )
+    return (receita_menos_custo,)
+
+
+@app.cell
+def _(mo, receita_menos_custo):
+    _df = mo.sql(
+        f"""
+        -- Seleciona transações com prejuízo
+        SELECT * FROM receita_menos_custo
+        WHERE diff_receita_custo < 0;
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo, receita_menos_custo):
+    prejuizo_por_produto = mo.sql(
+        f"""
+        -- Prejuízo por produto
+        SELECT 
+            id_product AS id_produto,
+        	ROUND(SUM(receita_transacao), 2) AS receita_brl,
+            ROUND(SUM(diff_receita_custo), 2) AS prejuizo_brl,
+            ROUND((prejuizo_brl / receita_brl), 2) AS perda_percentual
+        FROM receita_menos_custo
+        GROUP BY id_product
+        ORDER BY perda_percentual ASC;
+        """
+    )
+    return (prejuizo_por_produto,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -491,10 +612,103 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    /// admonition | Resposta:
+
+    O produto de id **72** foi o que apresentou maior porcentagem de perda financeira relativa no período (**63%**).
+    """)
+    return
+
+
+@app.cell
+def _(alt, prejuizo_por_produto):
+    # Gráfico do prejuízo por produto (10 maiores)
+    df_prejuizo = prejuizo_por_produto[prejuizo_por_produto['perda_percentual'] < 0].copy()
+    df_prejuizo_top10 = df_prejuizo.sort_values(by='perda_percentual', ascending=True).head(10)
+    df_prejuizo_top10['perda_percentual_positiva'] = df_prejuizo_top10['perda_percentual'].abs()
+
+    chart = alt.Chart(df_prejuizo_top10).mark_bar().encode(
+        x=alt.X('perda_percentual_positiva:Q', title='Perda Percentual', axis=alt.Axis(format='%')),
+        y=alt.Y('id_produto:N', title='ID do Produto', sort='-x'),
+        tooltip=['id_produto', 'perda_percentual', 'prejuizo_brl', 'receita_brl']
+    ).properties(
+        title=alt.TitleParams(
+            text='10 produtos com maiores prejuízos relativos',
+            subtitle='2023 - 2024'
+        ),
+        width=600,
+        height=400
+    ).configure_title(
+        fontSize=18,
+        subtitleFontSize=13,
+        subtitleColor='gray',
+        offset=10
+    )
+
+    chart
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## **Q4.3: Explique sobre o desenvolvimento**
     - Qual data de câmbio você utilizou?
     - Como definiu o prejuízo?
     - Alguma suposição relevante?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    Utilizei a média diária do valor de compra do dólar comercial, extraída do site do Banco Central.
+
+    O prejuízo da transação (em BRL) foi definido pelo produto `(custo_usd * quantidade * cotacao_dolar)`.
+
+    Usando esta métrica, 121 dos 150 produtos apresentaram prejuízo acumulado no período.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q5: Análise de clientes**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q5.1: Código SQL**
+    Código calculando:
+    - O Ticket Médio e a Diversidade de categorias por cliente.
+    - A identificação e filtro dos 10 clientes "Fiéis" (maior Ticket Médio entre aqueles com diversidade >= 3 categorias).
+    - A categoria mais vendida (em quantidade total de itens) considerando apenas o histórico desses 10 clientes.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q5.2: Validação**
+    Considerando apenas as compras realizadas pelos Top 10 Clientes selecionados (Critério: Maior Ticket Médio com 3+ categorias): Qual foi a categoria de produtos mais vendida para eles (maior quantidade total de itens)?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q5.3: Explique sobre o desenvolvimento**
+    - Como você realizou a limpeza das categorias?
+    - Qual lógica utilizou para filtrar os clientes com diversidade mínima?
+    - Como garantiu que a contagem de itens refletisse apenas os Top 10?
     """)
     return
 
