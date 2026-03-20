@@ -215,7 +215,7 @@ def _(mo, vendas):
 def _(mo, vendas):
     apurado_dia = mo.sql(
         f"""
-        -- Agregado de vandas por data
+        -- Agregado de vendas por data
         SELECT SUM(total) AS apurado, sale_date FROM vendas
         GROUP BY sale_date;
         """
@@ -315,7 +315,6 @@ def _(mo):
 @app.cell
 def _(carregar_dados):
     produtos = carregar_dados('data/produtos_raw.csv', 'csv')
-    produtos.head()
     return (produtos,)
 
 
@@ -361,7 +360,7 @@ def _(produtos):
     # Remove produtos duplicados
     produtos_limpo = produtos.drop_duplicates(keep='first').reset_index(drop=True)
     produtos_limpo
-    return
+    return (produtos_limpo,)
 
 
 @app.cell(hide_code=True)
@@ -693,6 +692,68 @@ def _(mo):
     return
 
 
+@app.cell
+def _(mo, vendas):
+    _df = mo.sql(
+        f"""
+        SELECT * FROM vendas;
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo, produtos_limpo):
+    _df = mo.sql(
+        f"""
+        SELECT * FROM produtos_limpo;
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo, produtos_limpo, vendas):
+    vendas_categoria = mo.sql(
+        f"""
+        -- Junção das tabelas vendas e produtos
+        -- Output: vendas_categoria
+        SELECT
+            v.id AS id_venda,
+            v.id_client AS id_cliente,
+            v.id_product AS id_produto,
+            p.actual_category AS categoria,
+            p.name AS descricao,
+            v.qtd,
+            v.total
+        FROM vendas v
+        LEFT JOIN produtos_limpo p
+            ON v.id_product = p.code;
+        """
+    )
+    return (vendas_categoria,)
+
+
+@app.cell
+def _(mo, vendas_categoria):
+    faturamento_cliente = mo.sql(
+        f"""
+        -- Calcula faturamento total, frequência, ticket médio e diversidade (por cliente)
+        -- Output: faturamento_cliente
+        SELECT 
+            id_cliente,
+            ROUND(SUM(total), 2) AS faturamento_total,
+            COUNT(id_venda) AS frequencia,
+            ROUND((faturamento_total / frequencia), 2) AS ticket_medio,
+            COUNT(DISTINCT categoria) AS diversidade
+        FROM vendas_categoria
+        GROUP BY id_cliente
+        ORDER BY ticket_medio DESC;
+        """
+    )
+    return (faturamento_cliente,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -705,10 +766,118 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    /// admonition | Resposta:
+
+    A categoria com mais itens vendidos para os 10 cliente selecionados é a de **propulsão**, com **6030** itens.
+    """)
+    return
+
+
+@app.cell
+def _(faturamento_cliente, mo, vendas_categoria):
+    _categoria_mais_vendida = mo.sql(
+        f"""
+        -- Usa a tabela faturamento_cliente para filtrar os 10 clientes com maior ticket_medio
+        -- Output: categoria_mais_vendida
+        WITH top_10_clientes AS (
+            SELECT 
+                id_cliente
+            FROM faturamento_cliente
+            LIMIT 10
+        )
+        SELECT 
+            categoria,
+            SUM(qtd) AS total_itens_vendidos
+        FROM vendas_categoria
+        WHERE id_cliente IN (SELECT id_cliente FROM top_10_clientes)
+        GROUP BY categoria
+        ORDER BY total_itens_vendidos DESC
+        LIMIT 1;
+        """
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## **Q5.3: Explique sobre o desenvolvimento**
     - Como você realizou a limpeza das categorias?
     - Qual lógica utilizou para filtrar os clientes com diversidade mínima?
     - Como garantiu que a contagem de itens refletisse apenas os Top 10?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    As categorias já haviam sido padronizadas ao responder a **Questão 2**. Usamos uma **estrutura condicional** e o método `apply()` do **pandas**, para aplicar a função à coluna.
+
+
+    ```python
+    def padronizar_categoria(texto):
+        # Converte para minúsculo e elimina os espaços em branco
+        texto_limpo = texto.lower().replace(' ', '')
+
+        # Classificação simplificada
+        if 'elet' in texto_limpo:
+            return 'eletrônicos'
+        elif 'prop' in texto_limpo:
+            return 'propulsão'
+        elif 'anc' or 'enc' in texto_limpo:
+            return 'ancoragem'
+        else:
+            return 'outros'
+
+    produtos['actual_category'] = produtos['actual_category'].apply(padronizar_categoria)
+    ```
+
+    Não foi necessário criar filtro de diversidade mínima, uma vez que todos os clientes compraram produtos de ao menos uma das três categorias.
+
+    Usamos uma **CTE (Common Table Expression)** para selecionar os 10 clientes com maior `ticket_médio`, e aplicamos essa seleção como filtro na consulta de agregação por categoria para descobrir a quantidade vendida em cada uma delas.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q6: Dimensão de calendário**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q6.1: Código SQL**
+    Código com:
+    - Desenvolvimento de um calendário com os dias da semana (em portugues)
+    - LEFT JOIN entre o calendário e a tabela de vendas
+    - agregação de vendas por dia (soma de valor_venda),
+    - substituição de valores nulos por zero para dias sem vendas
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q6.2: Validação**
+    Após considerar os dias zerados no cálculo: Qual é o Dia da Semana (ex: Domingo, Segunda...) que apresenta a menor média de vendas histórica, e qual é o valor dessa média arredondada para 2 casas decimais?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q6.3: Explique**
+    - Por que é necessário utilizar uma tabela de datas (calendário) em vez de agrupar diretamente a tabela de vendas?
+    - O que aconteceria com a média de vendas se um dia da semana tivesse muitos dias sem nenhuma venda registrada?
     """)
     return
 
