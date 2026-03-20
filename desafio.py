@@ -863,6 +863,69 @@ def _(mo):
     return
 
 
+@app.cell
+def _(mo):
+    calendario_dim = mo.sql(
+        f"""
+        -- Dimensão de datas
+        -- Output: calendario_dim
+        WITH base AS (
+            SELECT CAST(range AS DATE) AS data_pura
+            FROM range('2023-01-01'::DATE, '2025-01-01'::DATE, INTERVAL '1 day')
+        )
+        SELECT 
+            CAST(data_pura AS DATETIME) AS data,
+            CASE dayofweek(data_pura)
+                WHEN 0 THEN 'Domingo'
+                WHEN 1 THEN 'Segunda-feira'
+                WHEN 2 THEN 'Terça-feira'
+                WHEN 3 THEN 'Quarta-feira'
+                WHEN 4 THEN 'Quinta-feira'
+                WHEN 5 THEN 'Sexta-feira'
+                WHEN 6 THEN 'Sábado'
+            END AS dia_semana
+        FROM base;
+        """
+    )
+    return (calendario_dim,)
+
+
+@app.cell
+def _(calendario_dim, mo, vendas):
+    vendas_completa = mo.sql(
+        f"""
+        SELECT 
+            v.id_client AS id_cliente,
+            v.id_product AS id_produto,
+            COALESCE(v.qtd, 0) AS qtd,
+            COALESCE(v.total, 0) AS total,
+            c.data,
+            c.dia_semana
+        FROM calendario_dim c
+        LEFT JOIN vendas v
+        	ON c.data = v.sale_date;
+        """
+    )
+    return (vendas_completa,)
+
+
+@app.cell
+def _(mo, vendas_completa):
+    _df = mo.sql(
+        f"""
+        -- Calcula média e total de vendas por dia da semana
+        SELECT
+            dia_semana,
+            SUM(total) AS total,
+            ROUND(AVG(total), 2) AS media
+        FROM vendas_completa
+        GROUP BY dia_semana
+        ORDER BY total ASC;
+        """
+    )
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -875,9 +938,68 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    /// admonition | Resposta:
+
+    **Segunda-feira** é o dia com menor média de vendas históricas: **R$ 246.800,74**.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## **Q6.3: Explique**
     - Por que é necessário utilizar uma tabela de datas (calendário) em vez de agrupar diretamente a tabela de vendas?
     - O que aconteceria com a média de vendas se um dia da semana tivesse muitos dias sem nenhuma venda registrada?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    A tabela de vendas não contém informações sobre todos os dias do período.
+
+    Ao não considerarmos esses dias ausentes - e atribuirmos "zero" a eles - a **média** pode ser **inflada artificialmente**.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q7: Previsão de demanda**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q7.1: Código em python**
+    Adicione o código python usado para construção do modelo
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q7.2: Validação**
+    Utilizando seu modelo treinado, qual é a soma total da previsão de vendas (arredondada para número inteiro) para o 'Motor de Popa Yamaha Evo Dash 155HP' durante a primeira semana de Janeiro de 2024 (01/01 a 07/01)?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q7.3: Explique**
+    - Como o baseline foi construído?
+    - Como evitou data leakage?
+    - Uma limitação do modelo proposto.
     """)
     return
 
