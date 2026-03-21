@@ -9,8 +9,10 @@ def _():
     import marimo as mo
     import pandas as pd
     import altair as alt
+    from sklearn.metrics import mean_absolute_error
+    from sklearn.metrics.pairwise import cosine_similarity
 
-    return alt, mo, pd
+    return alt, cosine_similarity, mean_absolute_error, mo, pd
 
 
 @app.cell
@@ -984,6 +986,71 @@ def _(mo):
     return
 
 
+@app.cell
+def _(mo, produtos_limpo, vendas_completa):
+    df_final = mo.sql(
+        f"""
+        -- Junta tabelas vendas e produtos
+        -- Output: df_final
+        SELECT
+        	v.id_cliente,
+            v.id_produto,
+            p.name AS descricao,
+            p.actual_category AS categoria,
+            v.qtd,
+            v.total,
+            v.data,
+            v.dia_semana
+        FROM vendas_completa v
+        LEFT JOIN produtos_limpo p
+        	ON v.id_produto = p.code;
+        """
+    )
+    return (df_final,)
+
+
+@app.cell
+def _(df_final):
+    # Filtra o produto específico e ordena pela data da transação
+    df_motor = df_final[df_final['descricao'] == "Motor de Popa Yamaha Evo Dash 155HP"].copy().sort_values('data')
+    return (df_motor,)
+
+
+@app.cell
+def _(df_motor, pd):
+    # Agrupa o total de vendas por dia
+    vendas_diarias = df_motor.groupby('data')['total'].sum().reset_index()
+
+    # Cria calendário completo, preenchendo com zero dias sem vendas
+    data_inicio = pd.to_datetime('2023-01-01')
+    data_fim = pd.to_datetime('2024-01-31')
+    calendario = pd.DataFrame({'data': pd.date_range(start=data_inicio, end=data_fim, freq='D')})
+    df_completo = pd.merge(calendario, vendas_diarias, on='data', how='left').fillna(0)
+
+    return (df_completo,)
+
+
+@app.cell
+def _(df_completo, mean_absolute_error):
+    # Construção do Baseline - Média Móvel de 7 dias
+    df_completo['mm_7'] = df_completo['total'].shift(1).rolling(window=7).mean()
+
+    # Dados de teste
+    filtro_teste = (df_completo['data'] >= '2024-01-01') & (df_completo['data'] <= '2024-01-31')
+    df_teste = df_completo[filtro_teste].copy()
+
+    # Cálculo do MAE
+    mae = mean_absolute_error(df_teste['total'], df_teste['mm_7'])
+
+    # Previsão de faturamento da primeira semana (01/01 a 07/01)
+    filtro_prim_sem = (df_teste['data'] >= '2024-01-01') & (df_teste['data'] <= '2024-01-07')
+    soma_receita = df_teste[filtro_prim_sem]['mm_7'].sum()
+
+    print(f"MAE: {mae:.2f}")
+    print(f"Previsão total de faturamento na 1ª semana de Janneiro de 2024: {round(soma_receita)}")
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -996,10 +1063,155 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    /// admonition | Resposta:
+
+    **O faturamento previsto na primeira semana é 0**. Como não houve nenhuma venda desse item específico nos últimos 7 dias de dezembro de 2023, a média móvel calculada para a primeira semana de janeiro resultou em zero.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## **Q7.3: Explique**
     - Como o baseline foi construído?
     - Como evitou data leakage?
     - Uma limitação do modelo proposto.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    O modelo calculou a previsão para um determinado dia fazendo a **média aritmética simples** da receita nos **7 dias imediatamente anteriores**.
+
+    O vazamento de dados (**data leakage**) foi evitado usando uma função de deslocamento temporal (`shift(1)`) antes de calcular a média. Assim, a previsão para 01/01/2024, por exemplo, não tem acesso aos dados reais desse dia, apenas aos dados até 31/12/2023.
+
+    Este **modelo é limitado capturar tendências e sazonalidades**. Ele assume que o comportamento da próxima semana será igual ao da semana passada, ignorando que as vendas podem flutuar dependendo do mês/período do ano.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # **Q8: Sistema de recomendação**
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q8.1: Código em python**
+    Script em python que:
+    - Constrói a matriz usuário–item
+    - Calcula a similaridade de cosseno
+    - Gera o ranking de similaridade
+    """)
+    return
+
+
+@app.cell
+def _(df_final):
+    # Remove linhas com valores nulos nas variáveis de interesse 
+    df_recomenda = df_final.dropna(subset=['id_cliente', 'id_produto', 'descricao'])
+
+    # Identifica id do produto de interesse
+    produto_alvo = "GPS Garmin Vortex Maré Drift"
+    id_alvo = df_recomenda[df_recomenda['descricao'] == produto_alvo]['id_produto'].unique()[0]
+    return df_recomenda, id_alvo
+
+
+@app.cell
+def _(df_recomenda):
+    # Cria a Matriz Usuário x Produto
+    interacoes = df_recomenda[['id_cliente', 'id_produto']].drop_duplicates()
+    interacoes['comprou'] = 1
+
+    matriz_usuario_produto = interacoes.pivot(
+        index='id_cliente', 
+        columns='id_produto', 
+        values='comprou'
+    ).fillna(0)
+
+    matriz_usuario_produto
+    return (matriz_usuario_produto,)
+
+
+@app.cell
+def _(cosine_similarity, matriz_usuario_produto, pd):
+    # Cálcula similaridade do cosseno
+    similaridade_cos = cosine_similarity(matriz_usuario_produto.T)
+
+    df_similaridade = pd.DataFrame(
+        similaridade_cos, 
+        index=matriz_usuario_produto.columns, 
+        columns=matriz_usuario_produto.columns
+    ).round(4)
+
+    df_similaridade
+    return (df_similaridade,)
+
+
+@app.cell
+def _(df_similaridade, id_alvo):
+    # Classifica produtos por similaridade
+    ranking = df_similaridade[id_alvo].sort_values(ascending=False)
+
+    # Desconsideraa a similaridade do produto com ele mesmo (que sempre será 1.0)
+    ranking = ranking.drop(id_alvo)
+
+    # Obter o Top 5
+    top_5_ids = ranking.head(5)
+
+    top_5_ids
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q8.2: Validação**
+    Qual é o id_produto com MAIOR similaridade ao “GPS Garmin Vortex Maré Drift”?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    O produto de maior similaridade é o "**Motor de Popa Volvo Magnum 276HP**" (`id_produto = 94`), com um score de similaridade de aproximadamente **0.8696**.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## **Q8.3: Explique**
+    - Como a matriz foi construída?
+    - O que significa a similaridade de cosseno nesse contexto?
+    - Uma limitação desse método de recomendação.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    /// admonition | Resposta:
+
+    A **matriz** foi construída transformando os dados em uma estrutura onde cada linha representa um cliente único (`id_cliente`) e cada coluna representa um produto único (`id_produto`). Primeiro, filtramos a base, removendo duplicatas (desconsiderarando a quantidade de vezes que um cliente comprou o mesmo produto). Em seguida, preenchemos os cruzamentos com o valor 1 se o cliente comprou o produto e 0 caso caso contrário.
+
+    Nesse contexto, a **similaridade de cosseno** mede o quão parecidos são os clientes que compram dois produtos diferentes.
+
+    Uma limitação clássica desse tipo de modelo é o "**Cold Start**". Ao ser cadastrado, um **novo produto não terá histórico de compras**. Logo, sua similaridade com qualquer outro produto na matriz será 0.
     """)
     return
 
