@@ -17,11 +17,14 @@ def _():
 
 @app.cell
 def _(pd):
-    def carregar_dados(arquivo, tipo):
+    def carregar_dados(arquivo):
+        tipo = arquivo.split('.')[1].lower().strip()
+    
         if tipo == 'csv':
             df = pd.read_csv(arquivo)
         elif tipo == 'json':
             df = pd.read_json(arquivo)
+        
         return df
 
     return (carregar_dados,)
@@ -37,8 +40,7 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    vendas = carregar_dados('data/vendas_2023_2024.csv', 'csv')
-    vendas.head()
+    vendas = carregar_dados('data/vendas_2023_2024.csv')
     return (vendas,)
 
 
@@ -218,6 +220,7 @@ def _(mo, vendas):
     apurado_dia = mo.sql(
         f"""
         -- Agregado de vendas por data
+        -- Output: aprado_dia
         SELECT SUM(total) AS apurado, sale_date FROM vendas
         GROUP BY sale_date;
         """
@@ -251,6 +254,26 @@ def outliers_data(apurado_dia, mo):
         ORDER BY apurado DESC;
         """
     )
+    return
+
+
+@app.cell
+def _(alt, apurado_dia):
+    boxplot = alt.Chart(apurado_dia).mark_boxplot(size=80).encode(
+        y=alt.Y('apurado:Q', title='Valor Apurado (BRL)'),
+        tooltip=[
+            alt.Tooltip('sale_date:N', title='Data da Venda'),
+            alt.Tooltip('apurado:Q', title='Valor Apurado', format=',.2f')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text='Distribuição do valor apurado por data',
+        ),
+        width=300, 
+        height=400
+    )
+
+    boxplot
     return
 
 
@@ -316,7 +339,7 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    produtos = carregar_dados('data/produtos_raw.csv', 'csv')
+    produtos = carregar_dados('data/produtos_raw.csv')
     return (produtos,)
 
 
@@ -361,7 +384,6 @@ def _(produtos):
 def _(produtos):
     # Remove produtos duplicados
     produtos_limpo = produtos.drop_duplicates(keep='first').reset_index(drop=True)
-    produtos_limpo
     return (produtos_limpo,)
 
 
@@ -411,8 +433,7 @@ def _(mo):
 @app.cell
 def _(carregar_dados):
     # Lê arquivo json como um DataFrame pandas
-    custos_desnormalizado = carregar_dados('data/custos_importacao.json', 'json')
-    custos_desnormalizado
+    custos_desnormalizado = carregar_dados('data/custos_importacao.json')
     return (custos_desnormalizado,)
 
 
@@ -434,7 +455,6 @@ def _(custos_desnormalizado, pd):
 def _(custos, pd):
     # Converte coluna `start_date` para `datetime`
     custos['start_date'] = pd.to_datetime(custos['start_date'], format='%d/%m/%Y')
-    custos.head()
     return
 
 
@@ -511,6 +531,7 @@ def _(custos, mo, vendas):
     custo_vendas = mo.sql(
         f"""
         -- Junção das tabelas de custos e vendas (considerando históricos)
+        -- Output: custos_venda
         WITH custos_com_fim AS (
             SELECT 
                 *,
@@ -542,7 +563,6 @@ def _(converter_para_numero, dolar, pd):
     # Converte coluna `dataHoraCotacao` para `datetime` e `cotacaoCompra` para float
     dolar['dataHoraCotacao'] = pd.to_datetime(dolar['dataHoraCotacao'], format='mixed')
     dolar['cotacaoCompra'] = dolar['cotacaoCompra'].apply(converter_para_numero)
-    dolar.head()
     return
 
 
@@ -551,6 +571,7 @@ def _(custo_vendas, dolar, mo):
     receita_menos_custo = mo.sql(
         f"""
         -- Calcula lucro/prejuízo das transações
+        -- Output: receita_menos_custo
         SELECT 
             v.id_client, 
             v.id_product, 
@@ -586,6 +607,7 @@ def _(mo, receita_menos_custo):
     prejuizo_por_produto = mo.sql(
         f"""
         -- Prejuízo por produto
+        -- Output: prejuizo_por_produto
         SELECT 
             id_product AS id_produto,
         	ROUND(SUM(receita_transacao), 2) AS receita_brl,
@@ -896,6 +918,8 @@ def _(mo):
 def _(calendario_dim, mo, vendas):
     vendas_completa = mo.sql(
         f"""
+        -- Junção das tabelas venda e calendario
+        -- Output: vendas_completa
         SELECT 
             v.id_client AS id_cliente,
             v.id_product AS id_produto,
@@ -1026,7 +1050,6 @@ def _(df_motor, pd):
     data_fim = pd.to_datetime('2024-01-31')
     calendario = pd.DataFrame({'data': pd.date_range(start=data_inicio, end=data_fim, freq='D')})
     df_completo = pd.merge(calendario, vendas_diarias, on='data', how='left').fillna(0)
-
     return (df_completo,)
 
 
