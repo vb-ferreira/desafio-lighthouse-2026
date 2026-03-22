@@ -12,7 +12,7 @@
 
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.21.0"
 app = marimo.App(width="medium")
 
 
@@ -23,14 +23,15 @@ def _():
     import altair as alt
     from sklearn.metrics import mean_absolute_error
     from sklearn.metrics.pairwise import cosine_similarity
-
+    import warnings
+    warnings.filterwarnings('ignore', category=UserWarning)
     return alt, cosine_similarity, mean_absolute_error, mo, pd
 
 
 @app.cell
 def _(pd):
     def carregar_dados(arquivo):
-        tipo = arquivo.split(".")[1].lower().strip()
+        tipo = arquivo.split(".")[-1].lower().strip()
 
         if tipo == "csv":
             df = pd.read_csv(arquivo)
