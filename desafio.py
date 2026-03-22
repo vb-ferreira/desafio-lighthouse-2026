@@ -258,31 +258,6 @@ def outliers_data(apurado_dia, mo):
 
 
 @app.cell
-def _(alt, apurado_dia):
-    boxplot = (
-        alt.Chart(apurado_dia)
-        .mark_boxplot(size=80)
-        .encode(
-            y=alt.Y("apurado:Q", title="Valor Apurado (BRL)"),
-            tooltip=[
-                alt.Tooltip("sale_date:N", title="Data da Venda"),
-                alt.Tooltip("apurado:Q", title="Valor Apurado", format=",.2f"),
-            ],
-        )
-        .properties(
-            title=alt.TitleParams(
-                text="Distribuição do valor apurado por data",
-            ),
-            width=300,
-            height=400,
-        )
-    )
-
-    boxplot
-    return
-
-
-@app.cell
 def _(mo, vendas):
     _df = mo.sql(
         f"""
