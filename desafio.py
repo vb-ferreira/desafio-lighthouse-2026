@@ -18,13 +18,13 @@ def _():
 @app.cell
 def _(pd):
     def carregar_dados(arquivo):
-        tipo = arquivo.split('.')[1].lower().strip()
-    
-        if tipo == 'csv':
+        tipo = arquivo.split(".")[1].lower().strip()
+
+        if tipo == "csv":
             df = pd.read_csv(arquivo)
-        elif tipo == 'json':
+        elif tipo == "json":
             df = pd.read_json(arquivo)
-        
+
         return df
 
     return (carregar_dados,)
@@ -40,7 +40,7 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    vendas = carregar_dados('data/vendas_2023_2024.csv')
+    vendas = carregar_dados("data/vendas_2023_2024.csv")
     return (vendas,)
 
 
@@ -86,7 +86,7 @@ def profiling(mo, vendas):
 @app.cell
 def _(pd, vendas):
     # Converte coluna `sale_date` para `datetime`
-    vendas['sale_date'] = pd.to_datetime(vendas['sale_date'], format='mixed')
+    vendas["sale_date"] = pd.to_datetime(vendas["sale_date"], format="mixed")
     return
 
 
@@ -117,11 +117,11 @@ def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Mínimos, Máximos e Média (total)
-        SELECT 
-          MIN(sale_date) AS primeira_data, 
-          MAX(sale_date) AS ultima_data, 
-          MIN(total) AS total_minimo, 
-          MAX(total) AS total_macimo, 
+        SELECT
+          MIN(sale_date) AS primeira_data,
+          MAX(sale_date) AS ultima_data,
+          MIN(total) AS total_minimo,
+          MAX(total) AS total_macimo,
           ROUND(AVG(total), 2) AS total_media
         FROM vendas;
         """
@@ -192,15 +192,15 @@ def _(mo, vendas):
         f"""
         -- Outliers (Valor Unitário de Produto)
         WITH quartis AS (
-            SELECT 
+            SELECT
                 percentile_cont(0.25) WITHIN GROUP (ORDER BY total) as q1,
                 percentile_cont(0.75) WITHIN GROUP (ORDER BY total) as q3
             FROM vendas
         ),
         limites AS (
-            SELECT 
-                q1, 
-                q3, 
+            SELECT
+                q1,
+                q3,
                 (q3 - q1) as iqr,
                 (q1 - 1.5 * (iqr)) as limite_inferior,
                 (q3 + 1.5 * (iqr)) as limite_superior
@@ -234,15 +234,15 @@ def outliers_data(apurado_dia, mo):
         f"""
         -- Outliers (Vendas por data)
         WITH quartis AS (
-            SELECT 
+            SELECT
                 percentile_cont(0.25) WITHIN GROUP (ORDER BY apurado) as q1,
                 percentile_cont(0.75) WITHIN GROUP (ORDER BY apurado) as q3
             FROM apurado_dia
         ),
         limites AS (
-            SELECT 
-                q1, 
-                q3, 
+            SELECT
+                q1,
+                q3,
                 (q3 - q1) as iqr,
                 (q1 - 1.5 * (iqr)) as limite_inferior,
                 (q3 + 1.5 * (iqr)) as limite_superior
@@ -259,18 +259,23 @@ def outliers_data(apurado_dia, mo):
 
 @app.cell
 def _(alt, apurado_dia):
-    boxplot = alt.Chart(apurado_dia).mark_boxplot(size=80).encode(
-        y=alt.Y('apurado:Q', title='Valor Apurado (BRL)'),
-        tooltip=[
-            alt.Tooltip('sale_date:N', title='Data da Venda'),
-            alt.Tooltip('apurado:Q', title='Valor Apurado', format=',.2f')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text='Distribuição do valor apurado por data',
-        ),
-        width=300, 
-        height=400
+    boxplot = (
+        alt.Chart(apurado_dia)
+        .mark_boxplot(size=80)
+        .encode(
+            y=alt.Y("apurado:Q", title="Valor Apurado (BRL)"),
+            tooltip=[
+                alt.Tooltip("sale_date:N", title="Data da Venda"),
+                alt.Tooltip("apurado:Q", title="Valor Apurado", format=",.2f"),
+            ],
+        )
+        .properties(
+            title=alt.TitleParams(
+                text="Distribuição do valor apurado por data",
+            ),
+            width=300,
+            height=400,
+        )
     )
 
     boxplot
@@ -282,8 +287,8 @@ def _(mo, vendas):
     _df = mo.sql(
         f"""
         -- Número de linhas duplicadas
-        SELECT 
-            (SELECT COUNT(*) FROM vendas) - 
+        SELECT
+            (SELECT COUNT(*) FROM vendas) -
             (SELECT COUNT(*) FROM (SELECT DISTINCT * FROM vendas)) AS total_de_linhas_duplicadas;
         """
     )
@@ -308,7 +313,7 @@ def _(mo, vendas):
         -- Datas mal formatadas
         SELECT sale_date, COUNT(*)
         FROM vendas
-        WHERE TRY_CAST(sale_date AS DATE) IS NULL 
+        WHERE TRY_CAST(sale_date AS DATE) IS NULL
           AND sale_date IS NOT NULL
         GROUP BY ALL;
         """
@@ -339,7 +344,7 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    produtos = carregar_dados('data/produtos_raw.csv')
+    produtos = carregar_dados("data/produtos_raw.csv")
     return (produtos,)
 
 
@@ -348,19 +353,21 @@ def _(produtos):
     # Padroniza categorias
     def padronizar_categoria(texto):
         # Converte para minúsculo e elimina os espaços em branco
-        texto_limpo = texto.lower().replace(' ', '')
+        texto_limpo = texto.lower().replace(" ", "")
 
         # Classificação simplificada
-        if 'elet' in texto_limpo:
-            return 'eletrônicos'
-        elif 'prop' in texto_limpo:
-            return 'propulsão'
-        elif 'anc' or 'enc' in texto_limpo:
-            return 'ancoragem'
+        if "elet" in texto_limpo:
+            return "eletrônicos"
+        elif "prop" in texto_limpo:
+            return "propulsão"
+        elif "anc" or "enc" in texto_limpo:
+            return "ancoragem"
         else:
-            return 'outros'
+            return "outros"
 
-    produtos['actual_category'] = produtos['actual_category'].apply(padronizar_categoria)
+    produtos["actual_category"] = produtos["actual_category"].apply(
+        padronizar_categoria
+    )
     return
 
 
@@ -368,22 +375,22 @@ def _(produtos):
 def _(produtos):
     # Converte para número
     def converter_para_numero(valor):
-        if 'R$' in valor:
-            valor_limpo = valor.replace('R$', '').strip()
+        if "R$" in valor:
+            valor_limpo = valor.replace("R$", "").strip()
         else:
-            valor_limpo = valor.replace(',', '.').strip()
+            valor_limpo = valor.replace(",", ".").strip()
 
         # Converte para float
         return float(valor_limpo)
 
-    produtos['price'] = produtos['price'].apply(converter_para_numero)
+    produtos["price"] = produtos["price"].apply(converter_para_numero)
     return (converter_para_numero,)
 
 
 @app.cell
 def _(produtos):
     # Remove produtos duplicados
-    produtos_limpo = produtos.drop_duplicates(keep='first').reset_index(drop=True)
+    produtos_limpo = produtos.drop_duplicates(keep="first").reset_index(drop=True)
     return (produtos_limpo,)
 
 
@@ -433,17 +440,19 @@ def _(mo):
 @app.cell
 def _(carregar_dados):
     # Lê arquivo json como um DataFrame pandas
-    custos_desnormalizado = carregar_dados('data/custos_importacao.json')
+    custos_desnormalizado = carregar_dados("data/custos_importacao.json")
     return (custos_desnormalizado,)
 
 
 @app.cell
 def _(custos_desnormalizado, pd):
-    # Normaliza coluna `historic_data` 
+    # Normaliza coluna `historic_data`
     def normalizar_json(df):
-        df_explodido = df.explode('historic_data').reset_index(drop=True)
-        df_normalizado = pd.json_normalize(df_explodido['historic_data'])
-        df_final = pd.concat([df_explodido.drop(columns=['historic_data']), df_normalizado], axis=1)
+        df_explodido = df.explode("historic_data").reset_index(drop=True)
+        df_normalizado = pd.json_normalize(df_explodido["historic_data"])
+        df_final = pd.concat(
+            [df_explodido.drop(columns=["historic_data"]), df_normalizado], axis=1
+        )
 
         return df_final
 
@@ -454,7 +463,7 @@ def _(custos_desnormalizado, pd):
 @app.cell
 def _(custos, pd):
     # Converte coluna `start_date` para `datetime`
-    custos['start_date'] = pd.to_datetime(custos['start_date'], format='%d/%m/%Y')
+    custos["start_date"] = pd.to_datetime(custos["start_date"], format="%d/%m/%Y")
     return
 
 
@@ -533,7 +542,7 @@ def _(custos, mo, vendas):
         -- Junção das tabelas de custos e vendas (considerando históricos)
         -- Output: custos_venda
         WITH custos_com_fim AS (
-            SELECT 
+            SELECT
                 *,
                 -- Cria intervalo de "preço vigente"
                 LEAD(start_date) OVER (PARTITION BY product_id ORDER BY start_date) AS end_date
@@ -542,9 +551,9 @@ def _(custos, mo, vendas):
         -- Juntar onde a venda cai dentro desse intervalo
         SELECT v.id_client, v.id_product, v.qtd, v.total, v.sale_date, (c.usd_price * v.qtd) AS usd_price
         FROM vendas v
-        LEFT JOIN custos_com_fim c 
+        LEFT JOIN custos_com_fim c
             ON v.id_product = c.product_id
-           AND v.sale_date >= c.start_date 
+           AND v.sale_date >= c.start_date
            AND (v.sale_date < c.end_date OR c.end_date IS NULL);
         """
     )
@@ -554,15 +563,15 @@ def _(custos, mo, vendas):
 @app.cell
 def _(carregar_dados):
     # Carrega cotação do dolar no período
-    dolar = carregar_dados('data/dolar_2023_2024.csv', 'csv')
+    dolar = carregar_dados("data/dolar_2023_2024.csv")
     return (dolar,)
 
 
 @app.cell
 def _(converter_para_numero, dolar, pd):
     # Converte coluna `dataHoraCotacao` para `datetime` e `cotacaoCompra` para float
-    dolar['dataHoraCotacao'] = pd.to_datetime(dolar['dataHoraCotacao'], format='mixed')
-    dolar['cotacaoCompra'] = dolar['cotacaoCompra'].apply(converter_para_numero)
+    dolar["dataHoraCotacao"] = pd.to_datetime(dolar["dataHoraCotacao"], format="mixed")
+    dolar["cotacaoCompra"] = dolar["cotacaoCompra"].apply(converter_para_numero)
     return
 
 
@@ -572,18 +581,18 @@ def _(custo_vendas, dolar, mo):
         f"""
         -- Calcula lucro/prejuízo das transações
         -- Output: receita_menos_custo
-        SELECT 
-            v.id_client, 
-            v.id_product, 
-            v.qtd, 
-            v.total AS receita_transacao, 
+        SELECT
+            v.id_client,
+            v.id_product,
+            v.qtd,
+            v.total AS receita_transacao,
             v.sale_date,
             d.cotacaoCompra AS dolar_dia,
             (v.usd_price * v.qtd) AS custo_transacao_usd,
             (v.usd_price * dolar_dia) AS custo_transacao_brl,
             (receita_transacao - custo_transacao_brl) AS diff_receita_custo
         FROM custo_vendas v
-        LEFT JOIN dolar d 
+        LEFT JOIN dolar d
             ON v.sale_date = d.dataHoraCotacao;
         """
     )
@@ -608,7 +617,7 @@ def _(mo, receita_menos_custo):
         f"""
         -- Prejuízo por produto
         -- Output: prejuizo_por_produto
-        SELECT 
+        SELECT
             id_product AS id_produto,
         	ROUND(SUM(receita_transacao), 2) AS receita_brl,
             ROUND(SUM(diff_receita_custo), 2) AS prejuizo_brl,
@@ -645,26 +654,39 @@ def _(mo):
 @app.cell
 def _(alt, prejuizo_por_produto):
     # Gráfico do prejuízo por produto (10 maiores)
-    df_prejuizo = prejuizo_por_produto[prejuizo_por_produto['perda_percentual'] < 0].copy()
-    df_prejuizo_top10 = df_prejuizo.sort_values(by='perda_percentual', ascending=True).head(10)
-    df_prejuizo_top10['perda_percentual_positiva'] = df_prejuizo_top10['perda_percentual'].abs()
+    df_prejuizo = prejuizo_por_produto[
+        prejuizo_por_produto["perda_percentual"] < 0
+    ].copy()
+    df_prejuizo_top10 = df_prejuizo.sort_values(
+        by="perda_percentual", ascending=True
+    ).head(10)
+    df_prejuizo_top10["perda_percentual_positiva"] = df_prejuizo_top10[
+        "perda_percentual"
+    ].abs()
 
-    chart = alt.Chart(df_prejuizo_top10).mark_bar().encode(
-        x=alt.X('perda_percentual_positiva:Q', title='Perda Percentual', axis=alt.Axis(format='%')),
-        y=alt.Y('id_produto:N', title='ID do Produto', sort='-x'),
-        tooltip=['id_produto', 'perda_percentual', 'prejuizo_brl', 'receita_brl']
-    ).properties(
-        title=alt.TitleParams(
-            text='10 produtos com maiores prejuízos relativos',
-            subtitle='2023 - 2024'
-        ),
-        width=600,
-        height=400
-    ).configure_title(
-        fontSize=18,
-        subtitleFontSize=13,
-        subtitleColor='gray',
-        offset=10
+    chart = (
+        alt.Chart(df_prejuizo_top10)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "perda_percentual_positiva:Q",
+                title="Perda Percentual",
+                axis=alt.Axis(format="%"),
+            ),
+            y=alt.Y("id_produto:N", title="ID do Produto", sort="-x"),
+            tooltip=["id_produto", "perda_percentual", "prejuizo_brl", "receita_brl"],
+        )
+        .properties(
+            title=alt.TitleParams(
+                text="10 produtos com maiores prejuízos relativos",
+                subtitle="2023 - 2024",
+            ),
+            width=600,
+            height=400,
+        )
+        .configure_title(
+            fontSize=18, subtitleFontSize=13, subtitleColor="gray", offset=10
+        )
     )
 
     chart
@@ -764,7 +786,7 @@ def _(mo, vendas_categoria):
         f"""
         -- Calcula faturamento total, frequência, ticket médio e diversidade (por cliente)
         -- Output: faturamento_cliente
-        SELECT 
+        SELECT
             id_cliente,
             ROUND(SUM(total), 2) AS faturamento_total,
             COUNT(id_venda) AS frequencia,
@@ -804,12 +826,12 @@ def _(faturamento_cliente, mo, vendas_categoria):
         -- Usa a tabela faturamento_cliente para filtrar os 10 clientes com maior ticket_medio
         -- Output: categoria_mais_vendida
         WITH top_10_clientes AS (
-            SELECT 
+            SELECT
                 id_cliente
             FROM faturamento_cliente
             LIMIT 10
         )
-        SELECT 
+        SELECT
             categoria,
             SUM(qtd) AS total_itens_vendidos
         FROM vendas_categoria
@@ -897,7 +919,7 @@ def _(mo):
             SELECT CAST(range AS DATE) AS data_pura
             FROM range('2023-01-01'::DATE, '2025-01-01'::DATE, INTERVAL '1 day')
         )
-        SELECT 
+        SELECT
             CAST(data_pura AS DATETIME) AS data,
             CASE dayofweek(data_pura)
                 WHEN 0 THEN 'Domingo'
@@ -920,7 +942,7 @@ def _(calendario_dim, mo, vendas):
         f"""
         -- Junção das tabelas venda e calendario
         -- Output: vendas_completa
-        SELECT 
+        SELECT
             v.id_client AS id_cliente,
             v.id_product AS id_produto,
             COALESCE(v.qtd, 0) AS qtd,
@@ -1036,41 +1058,53 @@ def _(mo, produtos_limpo, vendas_completa):
 @app.cell
 def _(df_final):
     # Filtra o produto específico e ordena pela data da transação
-    df_motor = df_final[df_final['descricao'] == "Motor de Popa Yamaha Evo Dash 155HP"].copy().sort_values('data')
+    df_motor = (
+        df_final[df_final["descricao"] == "Motor de Popa Yamaha Evo Dash 155HP"]
+        .copy()
+        .sort_values("data")
+    )
     return (df_motor,)
 
 
 @app.cell
 def _(df_motor, pd):
     # Agrupa o total de vendas por dia
-    vendas_diarias = df_motor.groupby('data')['total'].sum().reset_index()
+    vendas_diarias = df_motor.groupby("data")["total"].sum().reset_index()
 
     # Cria calendário completo, preenchendo com zero dias sem vendas
-    data_inicio = pd.to_datetime('2023-01-01')
-    data_fim = pd.to_datetime('2024-01-31')
-    calendario = pd.DataFrame({'data': pd.date_range(start=data_inicio, end=data_fim, freq='D')})
-    df_completo = pd.merge(calendario, vendas_diarias, on='data', how='left').fillna(0)
+    data_inicio = pd.to_datetime("2023-01-01")
+    data_fim = pd.to_datetime("2024-01-31")
+    calendario = pd.DataFrame(
+        {"data": pd.date_range(start=data_inicio, end=data_fim, freq="D")}
+    )
+    df_completo = pd.merge(calendario, vendas_diarias, on="data", how="left").fillna(0)
     return (df_completo,)
 
 
 @app.cell
 def _(df_completo, mean_absolute_error):
     # Construção do Baseline - Média Móvel de 7 dias
-    df_completo['mm_7'] = df_completo['total'].shift(1).rolling(window=7).mean()
+    df_completo["mm_7"] = df_completo["total"].shift(1).rolling(window=7).mean()
 
     # Dados de teste
-    filtro_teste = (df_completo['data'] >= '2024-01-01') & (df_completo['data'] <= '2024-01-31')
+    filtro_teste = (df_completo["data"] >= "2024-01-01") & (
+        df_completo["data"] <= "2024-01-31"
+    )
     df_teste = df_completo[filtro_teste].copy()
 
     # Cálculo do MAE
-    mae = mean_absolute_error(df_teste['total'], df_teste['mm_7'])
+    mae = mean_absolute_error(df_teste["total"], df_teste["mm_7"])
 
     # Previsão de faturamento da primeira semana (01/01 a 07/01)
-    filtro_prim_sem = (df_teste['data'] >= '2024-01-01') & (df_teste['data'] <= '2024-01-07')
-    soma_receita = df_teste[filtro_prim_sem]['mm_7'].sum()
+    filtro_prim_sem = (df_teste["data"] >= "2024-01-01") & (
+        df_teste["data"] <= "2024-01-07"
+    )
+    soma_receita = df_teste[filtro_prim_sem]["mm_7"].sum()
 
     print(f"MAE: {mae:.2f}")
-    print(f"Previsão total de faturamento na 1ª semana de Janneiro de 2024: {round(soma_receita)}")
+    print(
+        f"Previsão total de faturamento na 1ª semana de Janneiro de 2024: {round(soma_receita)}"
+    )
     return
 
 
@@ -1140,25 +1174,25 @@ def _(mo):
 
 @app.cell
 def _(df_final):
-    # Remove linhas com valores nulos nas variáveis de interesse 
-    df_recomenda = df_final.dropna(subset=['id_cliente', 'id_produto', 'descricao'])
+    # Remove linhas com valores nulos nas variáveis de interesse
+    df_recomenda = df_final.dropna(subset=["id_cliente", "id_produto", "descricao"])
 
     # Identifica id do produto de interesse
     produto_alvo = "GPS Garmin Vortex Maré Drift"
-    id_alvo = df_recomenda[df_recomenda['descricao'] == produto_alvo]['id_produto'].unique()[0]
+    id_alvo = df_recomenda[df_recomenda["descricao"] == produto_alvo][
+        "id_produto"
+    ].unique()[0]
     return df_recomenda, id_alvo
 
 
 @app.cell
 def _(df_recomenda):
     # Cria a Matriz Usuário x Produto
-    interacoes = df_recomenda[['id_cliente', 'id_produto']].drop_duplicates()
-    interacoes['comprou'] = 1
+    interacoes = df_recomenda[["id_cliente", "id_produto"]].drop_duplicates()
+    interacoes["comprou"] = 1
 
     matriz_usuario_produto = interacoes.pivot(
-        index='id_cliente', 
-        columns='id_produto', 
-        values='comprou'
+        index="id_cliente", columns="id_produto", values="comprou"
     ).fillna(0)
 
     matriz_usuario_produto
@@ -1171,9 +1205,9 @@ def _(cosine_similarity, matriz_usuario_produto, pd):
     similaridade_cos = cosine_similarity(matriz_usuario_produto.T)
 
     df_similaridade = pd.DataFrame(
-        similaridade_cos, 
-        index=matriz_usuario_produto.columns, 
-        columns=matriz_usuario_produto.columns
+        similaridade_cos,
+        index=matriz_usuario_produto.columns,
+        columns=matriz_usuario_produto.columns,
     ).round(4)
 
     df_similaridade
