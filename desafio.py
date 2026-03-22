@@ -1,12 +1,18 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "altair==6.0.0",
+#     "duckdb==1.5.0",
 #     "marimo",
+#     "pandas==3.0.1",
+#     "scikit-learn==1.8.0",
+#     "sqlglot==30.0.3",
 # ]
 # ///
+
 import marimo
 
-__generated_with = "0.21.0"
+__generated_with = "0.21.1"
 app = marimo.App(width="medium")
 
 
@@ -46,7 +52,10 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    vendas = carregar_dados("data/vendas_2023_2024.csv")
+    try: 
+        vendas = carregar_dados("data/vendas_2023_2024.csv")
+    except FileNotFoundError:
+        vendas = carregar_dados("https://raw.githubusercontent.com/vb-ferreira/desafio-lighthouse-2026/refs/heads/main/data/vendas_2023_2024.csv")
     return (vendas,)
 
 
@@ -108,11 +117,11 @@ def _(mo, vendas):
 
 
 @app.cell
-def _(mo, vendas):
+def _(mo):
     _df = mo.sql(
         f"""
         -- Quantidade e tipo de dados de cada coluna
-        DESCRIBE vendas;
+        -- DESCRIBE vendas;
         """
     )
     return
@@ -325,7 +334,10 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    produtos = carregar_dados("data/produtos_raw.csv")
+    try: 
+        produtos = carregar_dados("data/produtos_raw.csv")
+    except FileNotFoundError:
+        produtos = carregar_dados("https://raw.githubusercontent.com/vb-ferreira/desafio-lighthouse-2026/refs/heads/main/data/produtos_raw.csv")
     return (produtos,)
 
 
@@ -420,8 +432,10 @@ def _(mo):
 
 @app.cell
 def _(carregar_dados):
-    # Lê arquivo json como um DataFrame pandas
-    custos_desnormalizado = carregar_dados("data/custos_importacao.json")
+    try: 
+        custos_desnormalizado = carregar_dados("data/custos_importacao.json")
+    except FileNotFoundError:
+        custos_desnormalizado = carregar_dados("https://raw.githubusercontent.com/vb-ferreira/desafio-lighthouse-2026/refs/heads/main/data/custos_importacao.json")
     return (custos_desnormalizado,)
 
 
@@ -544,7 +558,10 @@ def _(custos, mo, vendas):
 @app.cell
 def _(carregar_dados):
     # Carrega cotação do dolar no período
-    dolar = carregar_dados("data/dolar_2023_2024.csv")
+    try: 
+        dolar = carregar_dados("data/dolar_2023_2024.csv")
+    except FileNotFoundError:
+        dolar = carregar_dados("https://raw.githubusercontent.com/vb-ferreira/desafio-lighthouse-2026/refs/heads/main/data/dolar_2023_2024.csv")
     return (dolar,)
 
 

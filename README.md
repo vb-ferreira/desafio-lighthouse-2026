@@ -1,5 +1,9 @@
 # Desafio Lighthouse - Dados & AI (2026)
 
+## Demo
+
+[Editable Notebook](https://vb-ferreira.github.io/desafio-lighthouse-2026/)
+
 ## Installation
 
 These instructions assume you have `uv` installed. If not, you can install it using the [official documentation instructions](https://docs.astral.sh/uv/getting-started/installation/) (e.g., via `curl` on macOS/Linux or PowerShell on Windows).
@@ -22,3 +26,6 @@ You can **run the notebook** using `uv run` to ensure it executes within the iso
 
 ```bash
 uv run python desafio.py
+```
+
+> When prompted to _Run in a sandbox venv containing this notebook's dependencies [Y/n]?_ **Select "no"**.
